@@ -1,7 +1,9 @@
 import { formatCost, shortModelName } from '../../../src/shared/format';
+import { splitMentions } from '../../../src/shared/mentionSearch';
 import type { ModelInfo, TranscriptItem, Usage } from '../../../src/shared/protocol';
+import { useSmoothText } from '../useSmoothText';
 import { post } from '../vscodeApi';
-import { Codicon, ExternalLink } from './common';
+import { Codicon, ExternalLink, TypingDots } from './common';
 import { Markdown } from './Markdown';
 import { ConnectCard } from './Onboarding';
 import { ToolCallCard } from './ToolCallCard';
@@ -15,7 +17,21 @@ function compact(n: number): string {
 function UserMessage({ item }: { item: Item<'user'> }) {
 	return (
 		<div className="user-message">
-			<div className="user-bubble">{item.text}</div>
+			<div className="user-bubble">
+				{splitMentions(item.text, item.mentions ?? []).map((seg, i) => {
+					if (!seg.mention) {
+						return <span key={i}>{seg.text}</span>;
+					}
+					const isFolder = seg.mention.endsWith('/');
+					return isFolder
+						? <span key={i} className="mention-token" title={seg.mention}>{seg.text}</span>
+						: (
+							<button key={i} type="button" className="mention-token" title={`Open ${seg.mention}`} onClick={() => post({ type: 'openFile', path: seg.mention! })}>
+								{seg.text}
+							</button>
+						);
+				})}
+			</div>
 			{item.contextLabel && (
 				<div className="user-context"><Codicon name="file" /> {item.contextLabel}</div>
 			)}
@@ -25,6 +41,7 @@ function UserMessage({ item }: { item: Item<'user'> }) {
 
 function AssistantMessage({ item, streaming }: { item: Item<'assistant'>; streaming: boolean }) {
 	const empty = !item.text && !item.reasoning && item.toolCalls.length === 0;
+	const text = useSmoothText(item.text, streaming);
 	return (
 		<div className="assistant-message">
 			{item.reasoning && (
@@ -33,8 +50,8 @@ function AssistantMessage({ item, streaming }: { item: Item<'assistant'>; stream
 					<div className="reasoning-text">{item.reasoning}</div>
 				</details>
 			)}
-			{item.text && <Markdown text={item.text} />}
-			{streaming && empty && <div className="typing" role="status"><Codicon name="loading" spin /> Thinking…</div>}
+			{text && <Markdown text={text} streaming={streaming && item.toolCalls.length === 0} />}
+			{streaming && empty && <TypingDots label="Thinking" />}
 			{item.toolCalls.map(c => <ToolCallCard key={c.callId} call={c} />)}
 		</div>
 	);

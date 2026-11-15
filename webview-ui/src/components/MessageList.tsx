@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type Dispatch } from 'react';
 import type { Mode, TranscriptItem } from '../../../src/shared/protocol';
 import type { Action, UiState } from '../store';
-import { Codicon } from './common';
+import { Codicon, TypingDots } from './common';
 import { TranscriptItemView } from './Message';
 
 const SUGGESTIONS = [
@@ -88,7 +88,7 @@ export function MessageList({ state, dispatch }: { state: UiState; dispatch: Dis
 				/>
 			))}
 			{state.running && !streamingId && (
-				<div className="typing" role="status"><Codicon name="loading" spin /> Working…</div>
+				<TypingDots label="Working" />
 			)}
 		</div>
 	);

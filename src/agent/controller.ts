@@ -16,6 +16,7 @@ import type { ToolRegistry } from '../tools/registry';
 import { isDeniedPath } from '../util/glob';
 import { newId, truncateEnd } from '../util/text';
 import { AgentLoop } from './agentLoop';
+import { buildMentionAttachments, MentionIndex } from './mentions';
 import type { PermissionGate } from './permissions';
 import { titleFrom, toView, type Session, type SessionManager } from './session';
 
@@ -61,6 +62,7 @@ export class ChatController implements vscode.Disposable {
 	/** Text for the composer that arrived before the webview was ready. */
 	private pendingInsert: string | undefined;
 	private readonly agent: AgentLoop;
+	private readonly mentions: MentionIndex;
 	private readonly disposables: vscode.Disposable[] = [];
 	private readonly modelEmitter = new vscode.EventEmitter<void>();
 	readonly onDidChangeModel = this.modelEmitter.event;
@@ -84,8 +86,10 @@ export class ChatController implements vscode.Disposable {
 			this.lastEditor = active;
 		}
 		this.activeContext = this.computeActiveContext();
+		this.mentions = new MentionIndex(deps.settings);
 
 		this.disposables.push(
+			this.mentions,
 			this.modelEmitter,
 			deps.apiKeys.onDidChange(() => void this.refreshKeyState()),
 			deps.catalog.onDidChange(() => {
@@ -200,7 +204,10 @@ export class ChatController implements vscode.Disposable {
 					await this.clearApiKey();
 					break;
 				case 'sendMessage':
-					await this.sendMessage(msg.text, msg.includeActiveFile);
+					await this.sendMessage(msg.text, msg.includeActiveFile, msg.mentions ?? []);
+					break;
+				case 'searchMentions':
+					this.post({ type: 'mentionResults', requestId: msg.requestId, items: await this.mentions.search(msg.query) });
 					break;
 				case 'stop':
 					this.stop();
@@ -259,7 +266,7 @@ export class ChatController implements vscode.Disposable {
 
 	// ── Turns ────────────────────────────────────────────────────────────────
 
-	async sendMessage(text: string, includeActiveFile: boolean): Promise<void> {
+	async sendMessage(text: string, includeActiveFile: boolean, mentions: string[] = []): Promise<void> {
 		const trimmed = text.trim();
 		if (!trimmed || this.turn) {
 			return;
@@ -281,13 +288,21 @@ export class ChatController implements vscode.Disposable {
 
 		const session = this.deps.sessions.current;
 		const attachment = includeActiveFile ? this.buildAttachment() : undefined;
+		const mentioned = await buildMentionAttachments(mentions, this.deps.settings, session.readFiles);
+		if (this.turn) {
+			return; // another send started while the mentioned files were read
+		}
 		if (session.messages.length === 0) {
 			session.title = titleFrom(trimmed);
 		}
 		this.noteModel(session, model);
-		session.messages.push({ role: 'user', content: attachment ? `${trimmed}\n\n${attachment.text}` : trimmed });
+		const content = [trimmed, mentioned, attachment?.text].filter(Boolean).join('\n\n');
+		session.messages.push({ role: 'user', content });
 		const userItemId = newId('u');
-		this.emit({ type: 'transcriptAppend', item: { kind: 'user', id: userItemId, text: trimmed, contextLabel: attachment?.label } });
+		this.emit({
+			type: 'transcriptAppend',
+			item: { kind: 'user', id: userItemId, text: trimmed, contextLabel: attachment?.label, mentions: mentions.length ? mentions : undefined },
+		});
 		await this.runTurn(session, model, { userIndex: session.messages.length - 1, userItemId, draft: text });
 	}
 

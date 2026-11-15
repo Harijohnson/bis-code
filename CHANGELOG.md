@@ -4,7 +4,18 @@ All notable changes to the "bis-code" extension will be documented in this file.
 
 The format follows [Keep a Changelog](http://keepachangelog.com/).
 
-## [Unreleased]
+## [0.1.0]
+
+### Added
+
+- `@` mentions in the composer: fuzzy search across workspace files and folders, keyboard navigation, folder drill-down, highlighted mentions and chips. Mentioned files and folder listings are attached to the message, and secret files are never offered.
+- Smoother UI: messages and tool cards animate in, streaming text flows in character by character with a cursor, a typing indicator, animated Thinking and tool-card expansion, and button and focus transitions. All motion respects the reduced-motion setting.
+
+### Changed
+
+- The chat now opens in the right-hand (secondary) sidebar instead of the activity bar.
+
+## [0.0.1]
 
 ### Added
 
