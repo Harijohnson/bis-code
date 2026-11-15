@@ -23,3 +23,8 @@ pnpm-lock.yaml
 .env.*
 **/.env
 **/.env.*
+
+# Not part of the extension
+*.exe
+pnpm-workspace.yaml
+*.vsix
