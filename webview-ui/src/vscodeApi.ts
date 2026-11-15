@@ -17,6 +17,8 @@ export function post(msg: WebviewMessage): void {
 /** Per-view UI conveniences that survive the webview being hidden (not app state). */
 interface Persisted {
 	draft?: string;
+	/** Paths picked from the @-mention menu for the draft. */
+	mentions?: string[];
 }
 
 export function loadPersisted(): Persisted {
