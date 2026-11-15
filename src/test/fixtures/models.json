@@ -1,0 +1,55 @@
+{
+  "data": [
+    {
+      "id": "anthropic/claude-sonnet-4",
+      "name": "Anthropic: Claude Sonnet 4",
+      "description": "Claude Sonnet 4 balances capability and speed.",
+      "context_length": 200000,
+      "architecture": { "modality": "text+image->text", "input_modalities": ["text", "image"], "output_modalities": ["text"] },
+      "pricing": { "prompt": "0.000003", "completion": "0.000015" },
+      "top_provider": { "context_length": 200000, "max_completion_tokens": 64000, "is_moderated": true },
+      "supported_parameters": ["max_tokens", "temperature", "tools", "tool_choice", "reasoning", "include_reasoning"]
+    },
+    {
+      "id": "openai/gpt-4.1",
+      "name": "OpenAI: GPT-4.1",
+      "description": "GPT-4.1.",
+      "context_length": 1047576,
+      "architecture": { "input_modalities": ["text", "image", "file"] },
+      "pricing": { "prompt": "0.000002", "completion": "0.000008" },
+      "top_provider": { "context_length": 1047576, "max_completion_tokens": 32768 },
+      "supported_parameters": ["max_tokens", "temperature", "tools", "tool_choice", "response_format"]
+    },
+    {
+      "id": "openai/gpt-4.1-mini",
+      "name": "OpenAI: GPT-4.1 Mini",
+      "description": "Smaller GPT-4.1.",
+      "context_length": 1047576,
+      "architecture": { "input_modalities": ["text", "image"] },
+      "pricing": { "prompt": "0.0000004", "completion": "0.0000016" },
+      "top_provider": { "max_completion_tokens": 32768 },
+      "supported_parameters": ["max_tokens", "tools", "tool_choice"]
+    },
+    {
+      "id": "meta-llama/llama-3.3-70b-instruct:free",
+      "name": "Meta: Llama 3.3 70B Instruct (free)",
+      "description": "Free Llama.",
+      "context_length": 131072,
+      "architecture": { "input_modalities": ["text"] },
+      "pricing": { "prompt": "0", "completion": "0" },
+      "top_provider": { "max_completion_tokens": null },
+      "supported_parameters": ["max_tokens", "temperature"]
+    },
+    {
+      "id": "openrouter/auto",
+      "name": "Auto Router",
+      "description": "Routes to the best model.",
+      "context_length": 2000000,
+      "architecture": { "input_modalities": ["text", "image"] },
+      "pricing": { "prompt": "-1", "completion": "-1" },
+      "top_provider": {},
+      "supported_parameters": ["tools"]
+    },
+    { "name": "missing id is dropped" }
+  ]
+}

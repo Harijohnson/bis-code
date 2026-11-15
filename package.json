@@ -1,0 +1,254 @@
+{
+  "name": "bis-code",
+  "displayName": "bis-code",
+  "description": "An AI coding agent for VS Code powered by OpenRouter: chat, read and search your project, edit files and run commands with any OpenRouter model.",
+  "version": "0.0.1",
+  "publisher": "webchirpy",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/webchirpy/bis-code"
+  },
+  "engines": {
+    "vscode": "^1.146.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "openrouter",
+    "ai",
+    "agent",
+    "chat",
+    "llm"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In untrusted workspaces bis-code can chat and read files, but cannot edit files or run commands."
+    }
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bisCode",
+          "title": "bis-code",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "bisCode": [
+        {
+          "type": "webview",
+          "id": "bisCode.chat",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "bisCode.focus",
+        "title": "Open Chat",
+        "category": "bis-code"
+      },
+      {
+        "command": "bisCode.newChat",
+        "title": "New Chat",
+        "category": "bis-code",
+        "icon": "$(add)"
+      },
+      {
+        "command": "bisCode.selectModel",
+        "title": "Select Model",
+        "category": "bis-code"
+      },
+      {
+        "command": "bisCode.setApiKey",
+        "title": "Set OpenRouter API Key",
+        "category": "bis-code"
+      },
+      {
+        "command": "bisCode.clearApiKey",
+        "title": "Clear OpenRouter API Key",
+        "category": "bis-code"
+      },
+      {
+        "command": "bisCode.refreshModels",
+        "title": "Refresh Model List",
+        "category": "bis-code"
+      },
+      {
+        "command": "bisCode.addSelectionToChat",
+        "title": "Add Selection to Chat",
+        "category": "bis-code"
+      },
+      {
+        "command": "bisCode.stop",
+        "title": "Stop Current Turn",
+        "category": "bis-code"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "bisCode.addSelectionToChat",
+          "when": "editorHasSelection",
+          "group": "bisCode@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "bisCode.stop",
+          "when": "bisCode.running"
+        },
+        {
+          "command": "bisCode.addSelectionToChat",
+          "when": "editorHasSelection"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "bisCode.focus",
+        "key": "ctrl+shift+alt+b",
+        "mac": "cmd+shift+alt+b"
+      }
+    ],
+    "configuration": {
+      "title": "bis-code",
+      "properties": {
+        "bisCode.defaultModel": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "OpenRouter model id used when you haven't picked a model yet, for example `anthropic/claude-sonnet-4`."
+        },
+        "bisCode.maxIterations": {
+          "type": "number",
+          "default": 25,
+          "minimum": 1,
+          "description": "Maximum agent steps (model calls) per turn."
+        },
+        "bisCode.maxOutputTokens": {
+          "type": "number",
+          "default": 8192,
+          "minimum": 256,
+          "markdownDescription": "`max_tokens` sent to OpenRouter."
+        },
+        "bisCode.temperature": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Sampling temperature. Leave empty (null) to use the model's default."
+        },
+        "bisCode.autoApproveEdits": {
+          "type": "boolean",
+          "default": false,
+          "description": "Apply file edits without asking (Auto-edit). Commands still ask unless allow-listed."
+        },
+        "bisCode.allowedCommands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Command prefixes that run without asking, for example `npm test` or `git status`. Only applies to simple commands without `&&`, `|`, `;` or redirection."
+        },
+        "bisCode.deniedReadGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/.env",
+            "**/.env.*",
+            "!**/.env.example",
+            "**/*.pem",
+            "**/*.key",
+            "**/*.p12",
+            "**/*.pfx",
+            "**/id_rsa*",
+            "**/id_dsa*",
+            "**/id_ecdsa*",
+            "**/id_ed25519*",
+            "**/.netrc",
+            "**/.aws/credentials"
+          ],
+          "markdownDescription": "Files the agent may not read or write, because their contents would be sent to a third-party model provider. Prefix a pattern with `!` to make an exception."
+        },
+        "bisCode.commandTimeoutMs": {
+          "type": "number",
+          "default": 120000,
+          "minimum": 1000,
+          "description": "Default timeout for run_command, in milliseconds."
+        },
+        "bisCode.baseUrl": {
+          "type": "string",
+          "default": "https://openrouter.ai/api/v1",
+          "description": "OpenRouter API base URL. Change only for proxies or tests."
+        },
+        "bisCode.showOnlyToolModels": {
+          "type": "boolean",
+          "default": true,
+          "description": "Default for the model picker's \"Tool-capable only\" filter."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run package",
+    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "watch:tsc-webview": "tsc --noEmit --watch --project webview-ui/tsconfig.json",
+    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "vsix": "vsce package --no-dependencies",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "check-types": "tsc --noEmit && tsc --noEmit -p webview-ui",
+    "lint": "eslint src webview-ui/src",
+    "test:unit": "pnpm run compile-tests && mocha --ui tdd \"out/test/unit/**/*.test.js\"",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/vscode": "^1.146.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "^4.1.1",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
+    "mocha": "^12.0.3",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
+  },
+  "dependencies": {
+    "@vscode/codicons": "0.0.46-24",
+    "dompurify": "^3.4.18",
+    "dotenv": "^18.0.10",
+    "highlight.js": "^11.12.0",
+    "marked": "^18.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}

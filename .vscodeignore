@@ -1,0 +1,25 @@
+.vscode/**
+.vscode-test/**
+out/**
+node_modules/**
+src/**
+webview-ui/**
+.gitignore
+.yarnrc
+.npmrc
+esbuild.js
+vsc-extension-quickstart.md
+PLAN.md
+pnpm-lock.yaml
+**/tsconfig.json
+**/eslint.config.mjs
+**/*.map
+**/*.ts
+**/*.tsx
+**/.vscode-test.*
+
+# Local secrets — never package
+.env
+.env.*
+**/.env
+**/.env.*

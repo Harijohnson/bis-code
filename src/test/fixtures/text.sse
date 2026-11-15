@@ -1,0 +1,16 @@
+: OPENROUTER PROCESSING
+
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-1","provider":"Anthropic","model":"anthropic/claude-sonnet-4","object":"chat.completion.chunk","created":1763190000,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+data: {"id":"gen-1","provider":"Anthropic","model":"anthropic/claude-sonnet-4","object":"chat.completion.chunk","created":1763190000,"choices":[{"index":0,"delta":{"role":"assistant","reasoning":"Let me think."},"finish_reason":null}]}
+
+data: {"id":"gen-1","provider":"Anthropic","model":"anthropic/claude-sonnet-4","object":"chat.completion.chunk","created":1763190000,"choices":[{"index":0,"delta":{"role":"assistant","content":"Hello"},"finish_reason":null}]}
+
+data: {"id":"gen-1","provider":"Anthropic","model":"anthropic/claude-sonnet-4","object":"chat.completion.chunk","created":1763190000,"choices":[{"index":0,"delta":{"role":"assistant","content":", world!"},"finish_reason":"stop","native_finish_reason":"end_turn"}]}
+
+data: {"id":"gen-1","provider":"Anthropic","model":"anthropic/claude-sonnet-4","object":"chat.completion.chunk","created":1763190000,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}],"usage":{"prompt_tokens":1200,"completion_tokens":5,"total_tokens":1205,"cost":0.003675}}
+
+data: [DONE]
+
