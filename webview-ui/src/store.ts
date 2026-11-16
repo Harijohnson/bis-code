@@ -1,4 +1,4 @@
-import { isTranscriptEvent, type AppState, type ExtensionMessage } from '../../src/shared/protocol';
+import { isTranscriptEvent, type AppState, type ExtensionMessage, type MentionItem } from '../../src/shared/protocol';
 import { applyTranscriptEvent } from '../../src/shared/transcript';
 
 export type View = 'chat' | 'history';
@@ -8,6 +8,8 @@ export interface UiState extends AppState {
 	view: View;
 	/** Text pushed into the composer by the extension (insertText / restoreDraft). */
 	composerInject?: { text: string; replace: boolean; seq: number };
+	/** Latest @-mention search results; the composer ignores stale request ids. */
+	mentionResults?: { requestId: number; items: MentionItem[] };
 }
 
 export const initialState: UiState = {
@@ -77,6 +79,8 @@ export function reducer(state: UiState, action: Action): UiState {
 			return inject(state, msg.text, false);
 		case 'restoreDraft':
 			return inject(state, msg.text, true);
+		case 'mentionResults':
+			return { ...state, mentionResults: { requestId: msg.requestId, items: msg.items } };
 		default:
 			return state;
 	}

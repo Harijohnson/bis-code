@@ -8,6 +8,37 @@ The format follows [Keep a Changelog](http://keepachangelog.com/).
 
 ### Added
 
+- Sub-agents: `explore` (read-only, runs in parallel) and `delegate` (edits and commands with approvals); the main agent can send follow-ups with `agent_id`.
+- Project map: a `.gitignore`-aware map of the workspace's files, built when a project is opened, kept current and added to the system prompt. `bis-code: Show Project Map` command.
+- `grep` options `context_lines` and `files_only`.
+- In untrusted workspaces, the first edit or command asks you to trust the workspace (opens the Workspace Trust editor) instead of failing; the composer's **Restricted** label opens it too.
+
+### Changed
+
+- System prompt: principal-engineer working standard, targeted search before reading, stricter no-guessing rules, and asking only the questions that are necessary.
+- UI accent color `#4fc4a3` (with a darker shade for text in light themes), including the `@`-mention highlights.
+- Every window and every new chat starts in Agent mode; the last-used mode is no longer restored.
+
+### Fixed
+
+- `grep` and the project map find ripgrep in newer VS Code builds (`@vscode/ripgrep-universal`) instead of falling back to a slow JavaScript scan.
+- `grep` with `path` pointing at a single file no longer fails in the JavaScript fallback.
+
+## [0.1.0]
+
+### Added
+
+- `@` mentions in the composer: fuzzy search across workspace files and folders, keyboard navigation, folder drill-down, highlighted mentions and chips. Mentioned files and folder listings are attached to the message, and secret files are never offered.
+- Smoother UI: messages and tool cards animate in, streaming text flows in character by character with a cursor, a typing indicator, animated Thinking and tool-card expansion, and button and focus transitions. All motion respects the reduced-motion setting.
+
+### Changed
+
+- The chat now opens in the right-hand (secondary) sidebar instead of the activity bar.
+
+## [0.0.1]
+
+### Added
+
 - Chat panel in the activity bar with streaming Markdown, code blocks (Copy / Insert at cursor) and reasoning blocks.
 - OpenRouter integration: API key onboarding with validation, stored in SecretStorage; `.env` support in Development mode only.
 - Searchable model picker (webview popover and `bisCode.selectModel` QuickPick) with prices, context size, badges, filters and recent models; status bar item.
@@ -17,17 +48,3 @@ The format follows [Keep a Changelog](http://keepachangelog.com/).
 - Safety: workspace path guard, secret-file guard, `.git` write denial, command denylist, read-before-write checks and workspace-trust limits.
 - Sessions with history, resume and delete; per-turn and per-session token and cost display; automatic context compaction.
 - Unit tests and VS Code integration tests against a mock OpenRouter server.
-- Sub-agents: `explore` (read-only, runs in parallel) and `delegate` (edits and commands with approvals); the main agent can send follow-ups with `agent_id`.
-- Project map: a `.gitignore`-aware map of the workspace's files, built when a project is opened, kept current and added to the system prompt. `bis-code: Show Project Map` command.
-- `grep` options `context_lines` and `files_only`.
-- In untrusted workspaces, the first edit or command asks you to trust the workspace (opens the Workspace Trust editor) instead of failing; the composer's **Restricted** label opens it too.
-
-### Changed
-
-- System prompt: principal-engineer working standard, targeted search before reading, stricter no-guessing rules, and asking only the questions that are necessary.
-- UI accent color `#4fc4a3` (with a darker shade for text in light themes).
-
-### Fixed
-
-- `grep` and the project map find ripgrep in newer VS Code builds (`@vscode/ripgrep-universal`) instead of falling back to a slow JavaScript scan.
-- `grep` with `path` pointing at a single file no longer fails in the JavaScript fallback.

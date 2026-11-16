@@ -4,8 +4,9 @@ An AI coding agent for VS Code that works like Claude Code: it chats with you, r
 
 ## Features
 
-- **Chat panel** in the activity bar with streaming Markdown, syntax-highlighted code blocks (Copy / Insert at cursor) and a collapsible "Thinking" block for reasoning models.
+- **Chat panel** in the right-hand (secondary) sidebar with smoothly streaming Markdown, syntax-highlighted code blocks (Copy / Insert at cursor) and a collapsible "Thinking" block for reasoning models.
 - **Any OpenRouter model.** A searchable picker shows context size, price and `tools` / `vision` / `reasoning` / `free` badges, with filters and a Recent section. You can switch model mid-conversation.
+- **@-mentions.** Type `@` to fuzzy-search workspace files and folders. A mentioned file's contents (or a folder's listing) are attached to your message.
 - **Agent tools:** `read_file`, `list_dir`, `glob`, `grep` (VS Code's bundled ripgrep, with context lines and a files-only mode), `get_diagnostics`, `edit_file`, `write_file` and `run_command`.
 - **Sub-agents.** The agent can split larger work: `explore` starts read-only sub-agents that research separate questions in parallel, and `delegate` hands one well-scoped part of a feature to a sub-agent that can edit and run commands (you still approve each edit and command). Sub-agent messages appear in the chat under an accent rule, and the main agent can send a sub-agent follow-ups.
 - **Project map.** When a project is opened, bis-code maps its files (respecting `.gitignore`) and keeps the map current, so the agent can go straight to the right files instead of listing directories. Run **bis-code: Show Project Map** to see it.
@@ -15,7 +16,7 @@ An AI coding agent for VS Code that works like Claude Code: it chats with you, r
 
 ## Getting started
 
-1. Install the extension and click the **bis-code** icon in the activity bar (or press `Ctrl+Shift+Alt+B` / `Cmd+Shift+Alt+B`).
+1. Install the extension and open the chat in the right-hand sidebar: click the **bis-code** icon there, or press `Ctrl+Shift+Alt+B` / `Cmd+Shift+Alt+B`. You can drag it to another sidebar or the panel if you prefer.
 2. Click **Set API key**, create a key at [openrouter.ai/keys](https://openrouter.ai/keys) and paste it. The key is checked against OpenRouter and stored in your OS keychain (VS Code `SecretStorage`). It is never written to settings or files and never reaches the webview.
 3. Pick a model from the dropdown at the top of the chat, then ask away.
 
@@ -30,6 +31,16 @@ Agent and Plan modes need a model that supports tool calling. That is why the pi
 | Agent | All, with approvals | Making changes, running tests, fixing failures |
 | Plan | Read-only (`read_file`, `list_dir`, `glob`, `grep`, `get_diagnostics`, `explore`) | Understanding code and planning changes safely |
 | Chat | None | Plain conversation; works with every model |
+
+## Mentioning files and folders
+
+Type `@` in the message box (or click the **@** button) to open the file picker:
+
+- Type part of a name or path. Matching is fuzzy, so `@ctrl` finds `controller.ts` and `@cvp` finds `ChatViewProvider.ts`. Open editors are listed first.
+- **↑ / ↓** move, **Enter** adds the selected file or folder, **Tab** on a folder shows the files inside it, and **Esc** closes the picker.
+- Each mention appears as a chip above the input. Remove the chip, or delete the `@path` text, to drop it.
+
+When you send, each mentioned file's contents (up to about 60 KB per file) are attached to your message. A mentioned folder attaches a listing of its entries. Files attached in full count as read, so the agent can edit them straight away. Secret files blocked by `bisCode.deniedReadGlobs` never appear in the picker and are never attached.
 
 **Auto-edit** (the composer checkbox, or `bisCode.autoApproveEdits`) applies edits without asking. Commands still ask unless they match `bisCode.allowedCommands`.
 

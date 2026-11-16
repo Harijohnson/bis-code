@@ -13,6 +13,10 @@
 	--hover-bg: var(--vscode-list-hoverBackground);
 	--code-bg: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
 	--mono: var(--vscode-editor-font-family, monospace);
+	--t-fast: 120ms;
+	--t-med: 200ms;
+	--t-slow: 280ms;
+	--ease-out: cubic-bezier(0.2, 0.8, 0.25, 1);
 }
 
 * {
@@ -1028,16 +1032,19 @@ button.link:hover {
 /* ── Composer ────────────────────────────────────────────────────────── */
 
 .composer {
+	position: relative;
 	flex: none;
 	margin: 0 8px 8px;
 	padding: 6px;
 	border: 1px solid var(--vscode-input-border, var(--border));
-	border-radius: 6px;
+	border-radius: 8px;
 	background: var(--vscode-input-background);
+	transition: border-color var(--t-fast) ease, box-shadow var(--t-med) ease;
 }
 
 .composer:focus-within {
 	border-color: var(--focus);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
 }
 
 .context-chips {
@@ -1081,18 +1088,50 @@ button.link:hover {
 	font-size: 12px;
 }
 
-.composer textarea {
+/* The textarea sits on top of a backdrop that mirrors its text, so @mentions can be highlighted. */
+.composer-input {
+	position: relative;
+}
+
+.composer textarea,
+.composer-backdrop {
 	display: block;
 	width: 100%;
 	min-height: 24px;
+	margin: 0;
 	padding: 2px;
-	resize: none;
 	border: none;
+	font: inherit;
+	line-height: 1.45;
+	letter-spacing: normal;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	word-break: normal;
+	tab-size: 4;
+	scrollbar-gutter: stable;
+}
+
+.composer textarea {
+	position: relative;
+	resize: none;
 	outline: none;
 	background: transparent;
 	color: var(--vscode-input-foreground);
-	font: inherit;
-	line-height: 1.45;
+}
+
+.composer-backdrop {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: transparent;
+	pointer-events: none;
+}
+
+.composer-backdrop mark {
+	color: transparent;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--accent-text) 22%, transparent);
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-text) 35%, transparent);
 }
 
 .composer textarea::placeholder {
@@ -1144,9 +1183,22 @@ button.restricted:hover {
 	height: 24px;
 	padding: 0;
 	border: none;
-	border-radius: var(--radius);
+	border-radius: 6px;
 	background: var(--accent);
 	color: var(--accent-fg);
+	transition: background-color var(--t-fast) ease, transform var(--t-fast) ease, opacity var(--t-med) ease;
+}
+
+.send-button:disabled {
+	opacity: 0.45;
+}
+
+.send-button.ready .codicon {
+	animation: bc-nudge var(--t-slow) var(--ease-out) both;
+}
+
+.send-button:active:not(:disabled) {
+	transform: scale(0.9);
 }
 
 .send-button:hover:not(:disabled) {
@@ -1270,9 +1322,380 @@ button.restricted:hover {
 	color: var(--vscode-errorForeground);
 }
 
+/* ── @-mentions ──────────────────────────────────────────────────────── */
+
+.mention-picker {
+	position: absolute;
+	left: -1px;
+	right: -1px;
+	bottom: calc(100% + 6px);
+	z-index: 20;
+	display: flex;
+	flex-direction: column;
+	max-height: 280px;
+	border: 1px solid var(--vscode-editorWidget-border, var(--border));
+	border-radius: 8px;
+	background: var(--vscode-quickInput-background, var(--card-bg));
+	color: var(--vscode-quickInput-foreground, var(--vscode-foreground));
+	box-shadow: 0 6px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3));
+	overflow: hidden;
+	transform-origin: bottom center;
+	animation: bc-pop var(--t-med) var(--ease-out) both;
+}
+
+.mention-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 5px 8px;
+	border-bottom: 1px solid var(--border);
+	font-size: 0.85em;
+	color: var(--muted);
+}
+
+.mention-head > span:first-child {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.mention-keys {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.mention-keys kbd {
+	padding: 0 3px;
+	border: 1px solid var(--border);
+	border-radius: 3px;
+	font: inherit;
+	font-size: 0.9em;
+}
+
+.mention-list {
+	list-style: none;
+	margin: 0;
+	padding: 4px;
+	overflow-y: auto;
+}
+
+.mention-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 3px 6px;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color var(--t-fast) ease;
+}
+
+.mention-row.active {
+	background: var(--vscode-quickInputList-focusBackground, var(--vscode-list-activeSelectionBackground));
+	color: var(--vscode-quickInputList-focusForeground, var(--vscode-list-activeSelectionForeground));
+}
+
+.mention-row .codicon {
+	flex: none;
+}
+
+.mention-name {
+	flex: none;
+	max-width: 60%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mention-name mark {
+	background: none;
+	color: var(--accent-text);
+	font-weight: 700;
+}
+
+.mention-dir {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.85em;
+	opacity: 0.7;
+}
+
+.mention-drill {
+	display: inline-flex;
+	flex: none;
+	padding: 0 2px;
+	border: none;
+	border-radius: 3px;
+	background: none;
+	color: inherit;
+	opacity: 0.7;
+}
+
+.mention-drill:hover {
+	opacity: 1;
+	background: var(--hover-bg);
+}
+
+.mention-empty {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 10px;
+	color: var(--muted);
+}
+
+.mention-token {
+	display: inline;
+	padding: 0 3px;
+	border: none;
+	border-radius: 3px;
+	font: inherit;
+	background: color-mix(in srgb, var(--accent-text) 18%, transparent);
+	color: var(--accent-text);
+}
+
+button.mention-token {
+	cursor: pointer;
+}
+
+button.mention-token:hover {
+	text-decoration: underline;
+}
+
+.chip-mention {
+	background: color-mix(in srgb, var(--accent-text) 22%, var(--vscode-input-background));
+	color: var(--vscode-foreground);
+}
+
+.chip {
+	animation: bc-pop var(--t-med) var(--ease-out) both;
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────── */
+
+@keyframes bc-enter {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes bc-pop {
+	from {
+		opacity: 0;
+		transform: translateY(4px) scale(0.97);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes bc-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes bc-nudge {
+	from {
+		transform: translateX(-3px);
+		opacity: 0.4;
+	}
+	to {
+		transform: none;
+		opacity: 1;
+	}
+}
+
+@keyframes bc-dot {
+	0%, 80%, 100% {
+		opacity: 0.25;
+		transform: translateY(0);
+	}
+	40% {
+		opacity: 1;
+		transform: translateY(-3px);
+	}
+}
+
+@keyframes bc-caret {
+	50% {
+		opacity: 0;
+	}
+}
+
+@keyframes bc-glow {
+	0%, 100% {
+		box-shadow: 0 0 0 0 transparent;
+	}
+	50% {
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+	}
+}
+
+/* New transcript items slide in. Existing items keep their DOM nodes, so this runs once per item. */
+.user-message,
+.assistant-message,
+.divider,
+.notice,
+.error-card,
+.turn-footer {
+	animation: bc-enter var(--t-slow) var(--ease-out) both;
+}
+
+.tool-card,
+.approval {
+	animation: bc-pop var(--t-med) var(--ease-out) both;
+}
+
+.tool-card.status-awaitingApproval {
+	animation: bc-pop var(--t-med) var(--ease-out) both, bc-glow 2s ease-in-out 0.3s infinite;
+}
+
+.tool-card,
+.tool-status {
+	transition: border-color var(--t-med) ease, color var(--t-med) ease;
+}
+
+.tool-body {
+	animation: bc-enter var(--t-med) var(--ease-out) both;
+}
+
+.tool-chevron {
+	display: inline-flex;
+	transition: transform var(--t-med) var(--ease-out);
+}
+
+.tool-toggle[aria-expanded="true"] .tool-chevron {
+	transform: rotate(90deg);
+}
+
+.welcome,
+.history,
+.loading {
+	animation: bc-fade var(--t-slow) ease both;
+}
+
+.suggestions li {
+	animation: bc-enter var(--t-slow) var(--ease-out) both;
+}
+
+.suggestions li:nth-child(2) {
+	animation-delay: 60ms;
+}
+
+.suggestions li:nth-child(3) {
+	animation-delay: 120ms;
+}
+
+.suggestions button {
+	transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease, transform var(--t-fast) ease;
+}
+
+.suggestions button:hover {
+	border-color: var(--accent-border);
+	transform: translateX(2px);
+}
+
+.menu,
+.model-popover {
+	animation: bc-pop var(--t-med) var(--ease-out) both;
+}
+
+.icon-button,
+.model-button,
+.menu-item,
+.model-row,
+.history-list li,
+.code-btn,
+button.primary,
+button.secondary {
+	transition: background-color var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease, opacity var(--t-fast) ease;
+}
+
+/* Typing indicator */
+.typing-dots {
+	display: inline-flex;
+	gap: 3px;
+}
+
+.typing-dots i {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: currentColor;
+	animation: bc-dot 1.2s ease-in-out infinite;
+}
+
+.typing-dots i:nth-child(2) {
+	animation-delay: 0.15s;
+}
+
+.typing-dots i:nth-child(3) {
+	animation-delay: 0.3s;
+}
+
+/* Blinking caret at the end of streaming text */
+.markdown.streaming > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
+.markdown.streaming > :is(ul, ol):last-child > li:last-child::after {
+	content: "";
+	display: inline-block;
+	width: 0.45em;
+	height: 1.05em;
+	margin-left: 2px;
+	vertical-align: text-bottom;
+	border-radius: 1px;
+	background: var(--vscode-editorCursor-foreground, currentColor);
+	animation: bc-caret 1s steps(1) infinite;
+}
+
+/* The Thinking block opens and closes smoothly. */
+.reasoning {
+	interpolate-size: allow-keywords;
+}
+
+.reasoning::details-content {
+	block-size: 0;
+	overflow: hidden;
+	transition: block-size var(--t-slow) var(--ease-out), content-visibility var(--t-slow) allow-discrete;
+}
+
+.reasoning[open]::details-content {
+	block-size: auto;
+}
+
+.messages {
+	overscroll-behavior: contain;
+}
+
 /* Accessibility: respect reduced motion. */
 @media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		animation-delay: 0s !important;
+		transition-duration: 0.01ms !important;
+	}
+
 	.codicon-modifier-spin {
 		animation: none;
 	}
 }
+

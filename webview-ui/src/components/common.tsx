@@ -12,6 +12,16 @@ export function Codicon({ name, spin, title }: { name: string; spin?: boolean; t
 	);
 }
 
+/** Three pulsing dots, shown while waiting for the model. */
+export function TypingDots({ label }: { label: string }) {
+	return (
+		<div className="typing" role="status">
+			<span className="typing-dots" aria-hidden><i /><i /><i /></span>
+			<span>{label}…</span>
+		</div>
+	);
+}
+
 export function IconButton(props: { icon: string; title: string; onClick: (e: MouseEvent) => void; active?: boolean; disabled?: boolean }) {
 	return (
 		<button

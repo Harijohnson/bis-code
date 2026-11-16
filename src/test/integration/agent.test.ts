@@ -6,7 +6,7 @@ import type { BisCodeApi } from '../../extension';
 import type { TranscriptItem } from '../../shared/protocol';
 import { MockOpenRouter } from './mockServer';
 
-const EXTENSION_ID = 'webchirpy.bis-code';
+const EXTENSION_ID = 'hari72.bis-code';
 
 function toolMessages(req: MockOpenRouter['requests'][number]) {
 	return req.messages.filter(m => m.role === 'tool').map(m => m.content ?? '');

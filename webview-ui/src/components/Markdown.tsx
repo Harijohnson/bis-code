@@ -31,7 +31,7 @@ function onClick(e: MouseEvent<HTMLDivElement>) {
 	}
 }
 
-export const Markdown = memo(function Markdown({ text }: { text: string }) {
+export const Markdown = memo(function Markdown({ text, streaming }: { text: string; streaming?: boolean }) {
 	const html = useMemo(() => renderMarkdown(text), [text]);
-	return <div className="markdown" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
+	return <div className={`markdown${streaming ? ' streaming' : ''}`} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
 });

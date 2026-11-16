@@ -81,7 +81,7 @@ export function ToolCallCard({ call }: { call: ToolCallView }) {
 		<div className={`tool-card status-${call.status}`}>
 			<div className="tool-head">
 				<button type="button" className="tool-toggle" aria-expanded={open} onClick={() => setOpen(o => !o)}>
-					<Codicon name={open ? 'chevron-down' : 'chevron-right'} />
+					<span className="tool-chevron"><Codicon name="chevron-right" /></span>
 					<Codicon name={TOOL_ICONS[call.name] ?? 'tools'} />
 					<span className="tool-title" title={title}>{title}</span>
 				</button>

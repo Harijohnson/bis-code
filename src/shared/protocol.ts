@@ -67,7 +67,7 @@ export interface ToolCallView {
 export type ErrorCode = 'auth' | 'credits' | 'rateLimit' | 'network' | 'model' | 'unknown';
 
 export type TranscriptItem =
-	| { kind: 'user'; id: string; text: string; contextLabel?: string }
+	| { kind: 'user'; id: string; text: string; contextLabel?: string; mentions?: string[] }
 	| { kind: 'assistant'; id: string; model: string; text: string; reasoning: string; toolCalls: ToolCallView[]; agent?: AgentTag }
 	| { kind: 'footer'; id: string; model: string; usage?: Usage; cost?: number; stopped?: boolean }
 	| { kind: 'divider'; id: string; text: string }
@@ -93,6 +93,14 @@ export interface SessionView {
 	title: string;
 	items: TranscriptItem[];
 	totals: SessionTotals;
+}
+
+export type MentionKind = 'file' | 'folder';
+
+/** A workspace file or folder offered by the @-mention picker. Folder paths end with `/`. */
+export interface MentionItem {
+	path: string;
+	kind: MentionKind;
 }
 
 export interface ActiveContext {
@@ -127,7 +135,8 @@ export type WebviewMessage =
 	| { type: 'ready' }
 	| { type: 'requestApiKey' }
 	| { type: 'clearApiKey' }
-	| { type: 'sendMessage'; text: string; includeActiveFile: boolean }
+	| { type: 'sendMessage'; text: string; includeActiveFile: boolean; mentions?: string[] }
+	| { type: 'searchMentions'; requestId: number; query: string }
 	| { type: 'stop' }
 	| { type: 'retry' }
 	| { type: 'continue' }
@@ -174,6 +183,7 @@ export type ExtensionMessage =
 	| { type: 'activeContext'; context?: ActiveContext }
 	| { type: 'insertText'; text: string }
 	| { type: 'restoreDraft'; text: string }
+	| { type: 'mentionResults'; requestId: number; items: MentionItem[] }
 	| { type: 'trust'; trusted: boolean };
 
 const TRANSCRIPT_EVENT_TYPES = new Set<string>([

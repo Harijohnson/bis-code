@@ -2,7 +2,7 @@ import type { ErrorCode, Usage } from '../shared/protocol';
 
 export const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 /** Sent as HTTP-Referer for OpenRouter app attribution. */
-export const APP_URL = 'https://github.com/webchirpy/bis-code';
+export const APP_URL = 'https://github.com/Harijohnson/bis-code';
 export const APP_TITLE = 'bis-code';
 
 export interface ToolCall {

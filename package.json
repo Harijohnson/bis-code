@@ -2,13 +2,13 @@
   "name": "bis-code",
   "displayName": "bis-code",
   "description": "An AI coding agent for VS Code powered by OpenRouter: chat, read and search your project, edit files and run commands with any OpenRouter model.",
-  "version": "0.0.1",
-  "publisher": "webchirpy",
+  "version": "0.1.0",
+  "publisher": "hari72",
   "license": "MIT",
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/webchirpy/bis-code"
+    "url": "https://github.com/Harijohnson/bis-code"
   },
   "engines": {
     "vscode": "^1.146.0"
@@ -35,7 +35,7 @@
   },
   "contributes": {
     "viewsContainers": {
-      "activitybar": [
+      "secondarySidebar": [
         {
           "id": "bisCode",
           "title": "bis-code",
