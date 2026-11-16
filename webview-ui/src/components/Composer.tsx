@@ -95,9 +95,14 @@ export function Composer({ state, hidden }: { state: UiState; hidden: boolean })
 					</label>
 				)}
 				{!state.trusted && (
-					<span className="muted restricted" title="Untrusted workspace: edits and commands are disabled">
-						<Codicon name="shield" /> Restricted
-					</span>
+					<button
+						type="button"
+						className="restricted"
+						onClick={() => post({ type: 'requestTrust' })}
+						title="Restricted Mode: bis-code asks you to trust this workspace before it edits files or runs commands. Click to manage workspace trust."
+					>
+						<Codicon name="workspace-untrusted" /> Restricted
+					</button>
 				)}
 				<span className="spacer" />
 				{state.running

@@ -1,5 +1,6 @@
-import type { ApprovalDecision, Mode } from '../shared/protocol';
+import type { ApprovalDecision, Mode, SubagentKind } from '../shared/protocol';
 import type { AnyTool } from '../tools/registry';
+import { SUBAGENT_TOOL_NAMES } from '../tools/subagents';
 
 export interface GateOutcome {
 	decision: ApprovalDecision;
@@ -47,12 +48,23 @@ export class PermissionGate {
 }
 
 /**
- * Tools the model may use: Agent → all, Plan → read-only, Chat → none.
- * Mutating tools are also dropped in untrusted workspaces. Disallowed tools are never sent to the model.
+ * Tools the model may use: Agent → all, Plan → read-only, Chat → none. Disallowed tools are never sent
+ * to the model. Agent mode keeps edit and command tools in untrusted workspaces: calling one asks the
+ * user to trust the workspace first (see AgentLoop.runTool).
  */
-export function toolsForMode(mode: Mode, trusted: boolean, all: AnyTool[]): AnyTool[] {
+export function toolsForMode(mode: Mode, all: AnyTool[]): AnyTool[] {
 	if (mode === 'chat') {
 		return [];
 	}
-	return all.filter(t => t.permission === 'auto' || (mode === 'agent' && trusted));
+	return all.filter(t => t.permission === 'auto' || mode === 'agent');
+}
+
+/** A sub-agent's tools: explore → read-only, delegate → whatever the mode allows. Never other sub-agents. */
+export function toolsForSubagent(kind: SubagentKind, modeTools: AnyTool[]): AnyTool[] {
+	return modeTools.filter(t => !SUBAGENT_TOOL_NAMES.has(t.name) && (kind === 'delegate' || t.permission === 'auto'));
+}
+
+/** Tools that change the workspace and therefore need a trusted workspace. */
+export function needsTrust(tool: AnyTool): boolean {
+	return tool.permission === 'edit' || tool.permission === 'command';
 }

@@ -1,4 +1,8 @@
-/* Only VS Code theme variables are used, so light, dark and high-contrast themes all work. */
+/*
+ * VS Code theme variables, plus the bis-code accent (#4fc4a3) for buttons, links, focus and active
+ * states. The accent tokens live on `body` so the theme-class overrides below (VS Code puts
+ * vscode-light / vscode-dark / vscode-high-contrast[-light] on body) also change --focus.
+ */
 
 :root {
 	--gap: 8px;
@@ -24,12 +28,39 @@ body,
 }
 
 body {
+	/* Accent fills (buttons) carry dark text: #4fc4a3 is too light for white text. */
+	--accent: #4fc4a3;
+	--accent-hover: #3fb08f;
+	--accent-fg: #04241b;
+	/* Accent used as text or icon color on the panel background. */
+	--accent-text: #4fc4a3;
+	--accent-soft: rgba(79, 196, 163, 0.16);
+	--accent-border: rgba(79, 196, 163, 0.55);
+	--focus: var(--accent-text);
+
 	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
 	color: var(--vscode-foreground);
 	font-family: var(--vscode-font-family);
 	font-size: var(--vscode-font-size);
 	line-height: 1.5;
 	overflow: hidden;
+}
+
+/* On light backgrounds #4fc4a3 text is too faint (about 2:1), so use a darker shade of the accent. */
+body.vscode-light,
+body.vscode-high-contrast-light {
+	--accent-text: #177560;
+	--accent-border: rgba(23, 117, 96, 0.55);
+}
+
+/* High-contrast themes keep VS Code's own focus color. */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+	--focus: var(--vscode-focusBorder);
+}
+
+input[type='checkbox'] {
+	accent-color: var(--accent);
 }
 
 [hidden] {
@@ -48,7 +79,7 @@ button:disabled {
 }
 
 :focus-visible {
-	outline: 1px solid var(--vscode-focusBorder);
+	outline: 1px solid var(--focus);
 	outline-offset: 1px;
 }
 
@@ -59,12 +90,12 @@ pre {
 }
 
 a {
-	color: var(--vscode-textLink-foreground);
+	color: var(--accent-text);
 	text-decoration: none;
 }
 
 a:hover {
-	color: var(--vscode-textLink-activeForeground);
+	color: var(--accent-text);
 	text-decoration: underline;
 }
 
@@ -83,12 +114,12 @@ button.secondary {
 }
 
 button.primary {
-	background: var(--vscode-button-background);
-	color: var(--vscode-button-foreground);
+	background: var(--accent);
+	color: var(--accent-fg);
 }
 
 button.primary:hover:not(:disabled) {
-	background: var(--vscode-button-hoverBackground);
+	background: var(--accent-hover);
 }
 
 button.secondary {
@@ -104,7 +135,7 @@ button.link {
 	background: none;
 	border: none;
 	padding: 0;
-	color: var(--vscode-textLink-foreground);
+	color: var(--accent-text);
 }
 
 button.link:hover {
@@ -131,7 +162,8 @@ button.link:hover {
 }
 
 .icon-button.active {
-	outline: 1px solid var(--vscode-inputOption-activeBorder, transparent);
+	outline: 1px solid var(--accent-border);
+	color: var(--accent-text);
 }
 
 /* ── Layout ──────────────────────────────────────────────────────────── */
@@ -284,7 +316,7 @@ button.link:hover {
 }
 
 .model-search input:focus {
-	outline: 1px solid var(--vscode-focusBorder);
+	outline: 1px solid var(--focus);
 	outline-offset: -1px;
 }
 
@@ -308,9 +340,9 @@ button.link:hover {
 }
 
 .chip-toggle.active {
-	border-color: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
-	background: var(--vscode-inputOption-activeBackground);
-	color: var(--vscode-inputOption-activeForeground, inherit);
+	border-color: var(--accent-border);
+	background: var(--accent-soft);
+	color: var(--accent-text);
 }
 
 .provider-select,
@@ -356,7 +388,7 @@ button.link:hover {
 }
 
 .model-row.selected {
-	border-left-color: var(--vscode-focusBorder);
+	border-left-color: var(--accent);
 }
 
 .model-row-top {
@@ -466,6 +498,11 @@ button.link:hover {
 
 .suggestions button:hover {
 	background: var(--hover-bg);
+	border-color: var(--accent-border);
+}
+
+.suggestions .codicon {
+	color: var(--accent-text);
 }
 
 .user-message {
@@ -505,6 +542,42 @@ button.link:hover {
 	align-items: center;
 	gap: 6px;
 	color: var(--muted);
+}
+
+.typing .codicon {
+	color: var(--accent-text);
+}
+
+/* Messages written by sub-agents: indented under an accent rule with a label. */
+.assistant-message.subagent {
+	margin-left: 6px;
+	padding-left: 8px;
+	border-left: 2px solid var(--accent-border);
+}
+
+.subagent-label {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	font-size: 0.85em;
+	color: var(--muted);
+}
+
+.subagent-label .codicon,
+.subagent-kind {
+	color: var(--accent-text);
+}
+
+.subagent-kind {
+	font-weight: 600;
+	flex: none;
+}
+
+.subagent-task {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .reasoning {
@@ -717,7 +790,7 @@ button.link:hover {
 }
 
 .code-btn.done {
-	color: var(--vscode-testing-iconPassed, var(--vscode-foreground));
+	color: var(--accent-text);
 }
 
 .code-block pre {
@@ -800,15 +873,16 @@ button.link:hover {
 }
 
 .tool-card.status-awaitingApproval {
-	border-color: var(--vscode-focusBorder);
+	border-color: var(--accent);
 }
 
 .tool-card.status-error .tool-status {
 	color: var(--vscode-errorForeground);
 }
 
-.tool-card.status-done .tool-status {
-	color: var(--vscode-testing-iconPassed, var(--vscode-foreground));
+.tool-card.status-done .tool-status,
+.tool-card.status-awaitingApproval .tool-status {
+	color: var(--accent-text);
 }
 
 .tool-card.status-rejected .tool-status {
@@ -963,7 +1037,7 @@ button.link:hover {
 }
 
 .composer:focus-within {
-	border-color: var(--vscode-focusBorder);
+	border-color: var(--focus);
 }
 
 .context-chips {
@@ -979,10 +1053,15 @@ button.link:hover {
 	gap: 4px;
 	max-width: 100%;
 	padding: 0 2px 0 6px;
+	border: 1px solid var(--accent-border);
 	border-radius: 10px;
 	font-size: 0.85em;
-	background: var(--vscode-badge-background);
-	color: var(--vscode-badge-foreground);
+	background: var(--accent-soft);
+	color: var(--vscode-foreground);
+}
+
+.chip > .codicon {
+	color: var(--accent-text);
 }
 
 .chip-label {
@@ -1036,11 +1115,21 @@ button.link:hover {
 	user-select: none;
 }
 
-.restricted {
+button.restricted {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
+	padding: 0 4px;
+	border: none;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--vscode-editorWarning-foreground, var(--muted));
 	font-size: 0.9em;
+}
+
+button.restricted:hover {
+	background: var(--vscode-toolbar-hoverBackground);
+	text-decoration: underline;
 }
 
 .spacer {
@@ -1056,12 +1145,12 @@ button.link:hover {
 	padding: 0;
 	border: none;
 	border-radius: var(--radius);
-	background: var(--vscode-button-background);
-	color: var(--vscode-button-foreground);
+	background: var(--accent);
+	color: var(--accent-fg);
 }
 
 .send-button:hover:not(:disabled) {
-	background: var(--vscode-button-hoverBackground);
+	background: var(--accent-hover);
 }
 
 .send-button.stop {
@@ -1114,6 +1203,7 @@ button.link:hover {
 
 .history-list li.current {
 	background: var(--vscode-list-inactiveSelectionBackground, var(--hover-bg));
+	box-shadow: inset 2px 0 var(--accent);
 }
 
 .history-list li .icon-button {
@@ -1173,7 +1263,7 @@ button.link:hover {
 
 .connect-icon .codicon {
 	font-size: 28px;
-	color: var(--vscode-textLink-foreground);
+	color: var(--accent-text);
 }
 
 .connect-error {

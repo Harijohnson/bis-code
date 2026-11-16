@@ -1,10 +1,25 @@
 import type * as vscode from 'vscode';
 import type { Settings } from '../config/settings';
 import type { JsonSchema } from '../openrouter/types';
+import type { SubagentKind } from '../shared/protocol';
 import type { WorkspaceRoot } from './pathGuard';
 
-/** auto: runs without asking. edit: diff + approval (unless Auto-edit). command: approval unless allow-listed. */
-export type ToolPermission = 'auto' | 'edit' | 'command';
+/**
+ * auto: read-only; runs without asking, in parallel with other auto tools. edit: diff + approval
+ * (unless Auto-edit). command: approval unless allow-listed. delegate: starts a sub-agent that can
+ * edit and run commands (its own tool calls ask as usual); Agent mode only, never in parallel.
+ */
+export type ToolPermission = 'auto' | 'edit' | 'command' | 'delegate';
+
+export interface SubagentRequest {
+	kind: SubagentKind;
+	/** Short label shown in the UI. */
+	description: string;
+	/** Self-contained brief for the sub-agent. */
+	prompt: string;
+	/** Continue an earlier sub-agent instead of starting a new one. */
+	agentId?: string;
+}
 
 export interface ToolResult {
 	ok: boolean;
@@ -39,6 +54,8 @@ export interface ToolContext {
 	approveEdit(file: vscode.Uri, original: string | undefined, proposed: string, preview: string): Promise<ApprovalOutcome>;
 	/** Shows the command (and an optional warning) and waits for Run/Reject. */
 	approveCommand(command: string, cwdLabel: string, warning?: string): Promise<ApprovalOutcome>;
+	/** Runs a sub-agent and returns its report. Undefined inside sub-agents: they can't start others. */
+	runSubagent?(request: SubagentRequest): Promise<ToolResult>;
 }
 
 export interface Tool<A = Record<string, unknown>> {

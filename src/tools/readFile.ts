@@ -16,8 +16,9 @@ export const readFileTool: Tool<Args> = {
 	name: 'read_file',
 	description:
 		'Read a text file from the workspace. Returns lines prefixed with their 1-based line number and a tab ' +
-		`(the prefix is not part of the file). Reads up to ${DEFAULT_LIMIT} lines by default; use offset/limit for large files. ` +
-		'You must read a file before editing or overwriting it.',
+		`(the prefix is not part of the file). Reads up to ${DEFAULT_LIMIT} lines by default. ` +
+		'For large files, find the relevant lines with grep first, then read only that range with offset/limit. ' +
+		'You must read a file (at least the part you change) before editing it, and all of it before overwriting it.',
 	parameters: {
 		type: 'object',
 		properties: {

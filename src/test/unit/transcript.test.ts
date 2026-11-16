@@ -38,6 +38,19 @@ suite('transcript reducer', () => {
 		assert.strictEqual(after[2].kind, 'footer');
 	});
 
+	test('sub-agent messages carry their agent tag; main-agent messages have none', () => {
+		const tag = { id: 'agent_1', kind: 'explore' as const, label: 'Find the auth flow' };
+		const items = run([
+			{ type: 'assistantStart', messageId: 'm1', model: 'x' },
+			{ type: 'assistantStart', messageId: 'm2', model: 'x', agent: tag },
+			{ type: 'textDelta', messageId: 'm2', text: 'report' },
+		]);
+		assert.ok(items[0].kind === 'assistant' && !('agent' in items[0]));
+		assert.ok(items[1].kind === 'assistant');
+		assert.deepStrictEqual(items[1].agent, tag);
+		assert.strictEqual(items[1].text, 'report');
+	});
+
 	test('does not mutate the previous array', () => {
 		const start: TranscriptItem[] = [{ kind: 'assistant', id: 'm', model: 'x', text: 'a', reasoning: '', toolCalls: [] }];
 		const next = applyTranscriptEvent(start, { type: 'textDelta', messageId: 'm', text: 'b' });

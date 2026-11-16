@@ -13,6 +13,8 @@ const TOOL_ICONS: Record<string, string> = {
 	write_file: 'new-file',
 	edit_file: 'edit',
 	run_command: 'terminal',
+	explore: 'telescope',
+	delegate: 'robot',
 };
 
 const LIVE_OUTPUT_LINES = 12;
@@ -35,6 +37,8 @@ function describe(call: ToolCallView): string {
 		case 'write_file': return `Write ${str(a, 'path')}`;
 		case 'edit_file': return `Edit ${str(a, 'path')}`;
 		case 'run_command': return `Run ${str(a, 'command')}`;
+		case 'explore': return `Explore: ${str(a, 'description')}`;
+		case 'delegate': return `Delegate: ${str(a, 'description')}`;
 		default: return call.name;
 	}
 }

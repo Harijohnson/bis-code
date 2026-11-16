@@ -6,17 +6,21 @@ import {
 	isAbortError, OpenRouterError,
 	type ChatMessage, type ChatRequest, type StreamEvent, type ToolCall, type ToolDefinition,
 } from '../openrouter/types';
-import type { Mode, TranscriptEvent, Usage } from '../shared/protocol';
+import type { AgentTag, Mode, TranscriptEvent, Usage } from '../shared/protocol';
 import { workspaceRoots } from '../tools/common';
 import type { DiffPreviewProvider } from '../tools/diffPreview';
 import type { WorkspaceRoot } from '../tools/pathGuard';
 import { ToolRegistry, type AnyTool } from '../tools/registry';
-import { errorResult, validateArgs, type ApprovalOutcome, type ToolContext, type ToolResult } from '../tools/types';
+import {
+	errorResult, validateArgs,
+	type ApprovalOutcome, type SubagentRequest, type ToolContext, type ToolResult,
+} from '../tools/types';
 import { detectShell } from '../util/shell';
-import { newId, truncateMiddle } from '../util/text';
+import { newId, pluralize, truncateMiddle } from '../util/text';
 import { suggestPrefix } from './commandPolicy';
 import { COMPACT_THRESHOLD, compactMessages, contextBudget, effectiveMaxTokens, estimateChars, estimateTokens } from './context';
-import { toolsForMode, type PermissionGate } from './permissions';
+import { needsTrust, toolsForMode, toolsForSubagent, type PermissionGate } from './permissions';
+import type { ProjectMap } from './projectMap';
 import type { Session } from './session';
 import { buildSystemPrompt } from './systemPrompt';
 
@@ -27,8 +31,11 @@ export interface AgentDeps {
 	gate: PermissionGate;
 	diff: DiffPreviewProvider;
 	registry: ToolRegistry;
+	projectMap: Pick<ProjectMap, 'refresh' | 'promptText'>;
 	emit(ev: TranscriptEvent): void;
 	getEditor(): vscode.TextEditor | undefined;
+	/** Asks the user to trust the workspace so the agent can `action`; resolves true once it is trusted. */
+	requestTrust(action: string, signal: AbortSignal): Promise<boolean>;
 }
 
 export interface TurnOptions {
@@ -50,6 +57,8 @@ export interface TurnOutcome {
 
 /** Tool result text kept in the transcript for the expanded tool card. */
 const MAX_DETAIL_CHARS = 5000;
+/** Sub-agents that may run at the same time; further parallel explore calls wait for a slot. */
+const MAX_PARALLEL_SUBAGENTS = 3;
 
 type ParsedArgs ={ ok: true; value: Record<string, unknown> } | { ok: false; error: string };
 
@@ -81,102 +90,215 @@ interface StepResult {
 	finishReason?: string;
 }
 
-/** Everything a tool call needs from the step that produced it. */
-interface StepScope {
+/** Messages and read tracking for one agent: the session itself, or a sub-agent's own conversation. */
+interface Conversation {
+	messages: ChatMessage[];
+	/** Each agent must read a file itself before changing it (see ReadTracker). */
+	readFiles: Record<string, number>;
+	charsPerToken?: number;
+}
+
+interface Subagent extends Conversation {
+	tag: AgentTag;
+	/** A run is in progress, so it can't take a follow-up yet. */
+	busy: boolean;
+}
+
+/** Per-turn state shared by the main agent and its sub-agents. */
+interface TurnState {
+	usage: Usage;
+	cost?: number;
+	producedOutput: boolean;
+	/** The user declined to trust the workspace during this turn, so don't ask again. */
+	trustDeclined: boolean;
+}
+
+/** One agent's run within a turn: the main agent, or a sub-agent when `agent` is set. */
+interface LoopScope {
+	/** Owns the transcript. Sub-agents keep their messages in `convo`. */
 	session: Session;
-	messageId: string;
+	convo: Conversation;
 	opts: TurnOptions;
+	turn: TurnState;
+	signal: AbortSignal;
+	agent?: Subagent;
+}
+
+/** Everything a tool call needs from the step that produced it. */
+interface StepScope extends LoopScope {
+	messageId: string;
 	allowed: Set<string>;
 	roots: WorkspaceRoot[];
-	trusted: boolean;
-	signal: AbortSignal;
+}
+
+interface LoopEnd {
+	/** done: the model stopped calling tools. cutOff: its last reply hit the output token limit. */
+	reason: 'done' | 'stopped' | 'maxSteps' | 'cutOff';
+	/** The last non-empty text the model wrote; a sub-agent's report. */
+	text: string;
+	steps: number;
+}
+
+/** Counting semaphore that limits how many sub-agents run at once. */
+class Slots {
+	private active = 0;
+	private readonly waiting: (() => void)[] = [];
+
+	constructor(private readonly max: number) { }
+
+	async acquire(): Promise<void> {
+		if (this.active < this.max) {
+			this.active++;
+			return;
+		}
+		await new Promise<void>(resolve => {
+			this.waiting.push(resolve);
+		});
+	}
+
+	/** Hands the slot to the next waiter, if any. */
+	release(): void {
+		const next = this.waiting.shift();
+		if (next) {
+			next();
+		} else {
+			this.active--;
+		}
+	}
+}
+
+function subagentResult(agent: Subagent, end: LoopEnd, maxSteps: number): ToolResult {
+	const { id, kind, label } = agent.tag;
+	const notes: string[] = [];
+	if (end.reason === 'maxSteps') {
+		notes.push(`[The sub-agent stopped at the step limit (${maxSteps}) before finishing. Send it a follow-up with agent_id to let it continue.]`);
+	} else if (end.reason === 'cutOff') {
+		notes.push('[Its last reply was cut off by the output token limit.]');
+	}
+	notes.push(`[agent_id: ${id}. Pass it to ${kind} to send this sub-agent a follow-up; it keeps its context.]`);
+	const report = end.text.trim() || '(The sub-agent finished without writing a report.)';
+	return {
+		ok: true,
+		content: `${report}\n\n${notes.join('\n')}`,
+		summary: `${kind === 'explore' ? 'Explored' : 'Delegated'}: ${label} (${pluralize(end.steps, 'step')})`,
+	};
 }
 
 export class AgentLoop {
+	/** Sub-agents by id, per chat, so the main agent can send them follow-ups. Kept in memory only. */
+	private readonly subagents = new WeakMap<Session, Map<string, Subagent>>();
+	private readonly subagentSlots = new Slots(MAX_PARALLEL_SUBAGENTS);
+
 	constructor(private readonly deps: AgentDeps) { }
 
 	/** Runs model ↔ tool iterations until the model stops calling tools, the user stops, or the step limit is hit. */
 	async run(session: Session, opts: TurnOptions, signal: AbortSignal): Promise<TurnOutcome> {
-		const usage: Usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-		let cost: number | undefined;
-		let producedOutput = false;
-		const addUsage = (u: Usage | undefined) => {
-			if (!u) {
-				return;
-			}
-			usage.promptTokens += u.promptTokens;
-			usage.completionTokens += u.completionTokens;
-			usage.totalTokens += u.totalTokens;
-			if (u.cost !== undefined) {
-				cost = (cost ?? 0) + u.cost;
-			}
+		const turn: TurnState = {
+			usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+			producedOutput: false,
+			trustDeclined: false,
 		};
-		const outcome = (extra: Partial<TurnOutcome> = {}): TurnOutcome => ({ usage, cost, producedOutput, stopped: false, ...extra });
-
-		const { settings, catalog, registry } = this.deps;
-		const maxIterations = settings.maxIterations;
+		const outcome = (extra: Partial<TurnOutcome> = {}): TurnOutcome =>
+			({ usage: turn.usage, cost: turn.cost, producedOutput: turn.producedOutput, stopped: false, ...extra });
 		try {
-			for (let step = 1; ; step++) {
-				if (signal.aborted) {
+			const end = await this.loop({ session, convo: session, opts, turn, signal });
+			switch (end.reason) {
+				case 'stopped':
 					return outcome({ stopped: true });
-				}
-				if (step > maxIterations) {
-					this.notice(`Stopped after ${maxIterations} steps (bisCode.maxIterations).`, 'continue');
-					return outcome();
-				}
-
-				const mode = opts.mode();
-				const modelInfo = catalog.find(opts.model);
-				const roots = workspaceRoots();
-				const trusted = vscode.workspace.isTrusted;
-				const tools = toolsForMode(mode, trusted, registry.all());
-				if (tools.length && modelInfo && !modelInfo.supportsTools) {
-					throw new OpenRouterError('model', `${modelInfo.name} can't use tools. Switch to a tool-capable model, or use Chat mode.`);
-				}
-				const toolDefs = ToolRegistry.definitions(tools);
-				const system = buildSystemPrompt({
-					mode, trusted, roots,
-					shell: detectShell(vscode.env.shell),
-					editor: this.deps.getEditor(),
-					toolNames: tools.map(t => t.name),
-					deniedGlobs: settings.deniedReadGlobs,
-				});
-				const maxTokens = effectiveMaxTokens(modelInfo, settings.maxOutputTokens);
-				const budget = contextBudget(modelInfo, maxTokens);
-				await this.maybeCompact(session, opts.model, system, toolDefs, budget, signal, addUsage);
-
-				const messages: ChatMessage[] = [{ role: 'system', content: system }, ...session.messages];
-				const promptChars = estimateChars(messages, toolDefs);
-				const overBudget = estimateTokens(promptChars, session.charsPerToken) > budget;
-				const request: ChatRequest = {
-					model: opts.model,
-					messages,
-					...(toolDefs.length ? { tools: toolDefs, tool_choice: 'auto' as const } : {}),
-					max_tokens: maxTokens,
-					...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
-					...(overBudget ? { transforms: ['middle-out'] } : {}),
-				};
-
-				const messageId = newId('m');
-				const result = await this.streamStep(session, request, messageId, opts.model, promptChars, signal, addUsage);
-				if (result.text || result.toolCalls.length) {
-					producedOutput = true;
-				}
-				if (!result.toolCalls.length) {
-					if (result.finishReason === 'length') {
-						this.notice('The response was cut off because it reached the output token limit.', 'continue');
-					}
-					return outcome();
-				}
-				const scope: StepScope = { session, messageId, opts, allowed: new Set(tools.map(t => t.name)), roots, trusted, signal };
-				await this.executeToolCalls(scope, result.toolCalls);
-				if (signal.aborted) {
-					return outcome({ stopped: true });
-				}
+				case 'maxSteps':
+					this.notice(`Stopped after ${end.steps} steps (bisCode.maxIterations).`, 'continue');
+					break;
+				case 'cutOff':
+					this.notice('The response was cut off because it reached the output token limit.', 'continue');
+					break;
 			}
+			return outcome();
 		} catch (err) {
 			const e = toOpenRouterError(err);
 			return e.code === 'aborted' || signal.aborted ? outcome({ stopped: true }) : outcome({ error: e });
+		}
+	}
+
+	/** The model ↔ tool loop shared by the main agent and sub-agents. Throws on API errors. */
+	private async loop(scope: LoopScope): Promise<LoopEnd> {
+		const { settings, catalog, registry, projectMap } = this.deps;
+		const { convo, opts, signal, agent } = scope;
+		const addUsage = (u: Usage | undefined) => this.addUsage(scope.turn, u);
+		let text = '';
+		for (let step = 1; ; step++) {
+			if (signal.aborted) {
+				return { reason: 'stopped', text, steps: step - 1 };
+			}
+			if (step > settings.maxIterations) {
+				return { reason: 'maxSteps', text, steps: step - 1 };
+			}
+
+			const mode = opts.mode();
+			const modelInfo = catalog.find(opts.model);
+			const roots = workspaceRoots();
+			const modeTools = toolsForMode(mode, registry.all());
+			const tools = agent ? toolsForSubagent(agent.tag.kind, modeTools) : modeTools;
+			if (tools.length && modelInfo && !modelInfo.supportsTools) {
+				throw new OpenRouterError('model', `${modelInfo.name} can't use tools. Switch to a tool-capable model, or use Chat mode.`);
+			}
+			const toolDefs = ToolRegistry.definitions(tools);
+			if (tools.length) {
+				await projectMap.refresh();
+			}
+			const system = buildSystemPrompt({
+				mode,
+				trusted: vscode.workspace.isTrusted,
+				roots,
+				shell: detectShell(vscode.env.shell),
+				editor: this.deps.getEditor(),
+				toolNames: tools.map(t => t.name),
+				deniedGlobs: settings.deniedReadGlobs,
+				projectMap: projectMap.promptText(),
+				subagent: agent?.tag.kind,
+			});
+			const maxTokens = effectiveMaxTokens(modelInfo, settings.maxOutputTokens);
+			const budget = contextBudget(modelInfo, maxTokens);
+			await this.maybeCompact(convo, opts.model, system, toolDefs, budget, signal, addUsage, agent?.tag);
+
+			const messages: ChatMessage[] = [{ role: 'system', content: system }, ...convo.messages];
+			const promptChars = estimateChars(messages, toolDefs);
+			const overBudget = estimateTokens(promptChars, convo.charsPerToken) > budget;
+			const request: ChatRequest = {
+				model: opts.model,
+				messages,
+				...(toolDefs.length ? { tools: toolDefs, tool_choice: 'auto' as const } : {}),
+				max_tokens: maxTokens,
+				...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
+				...(overBudget ? { transforms: ['middle-out'] } : {}),
+			};
+
+			const messageId = newId('m');
+			const result = await this.streamStep(convo, request, messageId, opts.model, promptChars, signal, addUsage, agent?.tag);
+			if (result.text || result.toolCalls.length) {
+				scope.turn.producedOutput = true;
+			}
+			if (result.text.trim()) {
+				text = result.text;
+			}
+			if (!result.toolCalls.length) {
+				return { reason: result.finishReason === 'length' ? 'cutOff' : 'done', text, steps: step };
+			}
+			await this.executeToolCalls({ ...scope, messageId, allowed: new Set(tools.map(t => t.name)), roots }, result.toolCalls);
+			if (signal.aborted) {
+				return { reason: 'stopped', text, steps: step };
+			}
+		}
+	}
+
+	private addUsage(turn: TurnState, u: Usage | undefined): void {
+		if (!u) {
+			return;
+		}
+		turn.usage.promptTokens += u.promptTokens;
+		turn.usage.completionTokens += u.completionTokens;
+		turn.usage.totalTokens += u.totalTokens;
+		if (u.cost !== undefined) {
+			turn.cost = (turn.cost ?? 0) + u.cost;
 		}
 	}
 
@@ -185,20 +307,21 @@ export class AgentLoop {
 	}
 
 	private async maybeCompact(
-		session: Session, model: string, system: string, toolDefs: ToolDefinition[], budget: number,
-		signal: AbortSignal, addUsage: (u: Usage | undefined) => void,
+		convo: Conversation, model: string, system: string, toolDefs: ToolDefinition[], budget: number,
+		signal: AbortSignal, addUsage: (u: Usage | undefined) => void, tag?: AgentTag,
 	): Promise<void> {
 		const fixedChars = system.length + (toolDefs.length ? JSON.stringify(toolDefs).length : 0);
-		const estimate = estimateTokens(fixedChars + estimateChars(session.messages), session.charsPerToken);
+		const estimate = estimateTokens(fixedChars + estimateChars(convo.messages), convo.charsPerToken);
 		if (estimate < budget * COMPACT_THRESHOLD) {
 			return;
 		}
 		try {
-			const fixedTokens = estimateTokens(fixedChars, session.charsPerToken);
-			const result = await compactMessages(session, this.deps.client, model, Math.max(1024, budget - fixedTokens), signal);
+			const fixedTokens = estimateTokens(fixedChars, convo.charsPerToken);
+			const result = await compactMessages(convo, this.deps.client, model, Math.max(1024, budget - fixedTokens), signal);
 			if (result) {
 				addUsage(result.usage);
-				this.deps.emit({ type: 'transcriptAppend', item: { kind: 'divider', id: newId('d'), text: 'Context compacted' } });
+				const text = tag ? `Context compacted (${tag.label})` : 'Context compacted';
+				this.deps.emit({ type: 'transcriptAppend', item: { kind: 'divider', id: newId('d'), text } });
 			}
 		} catch (err) {
 			if (signal.aborted || isAbortError(err)) {
@@ -209,11 +332,11 @@ export class AgentLoop {
 	}
 
 	private async streamStep(
-		session: Session, request: ChatRequest, messageId: string, model: string, promptChars: number,
-		signal: AbortSignal, addUsage: (u: Usage | undefined) => void,
+		convo: Conversation, request: ChatRequest, messageId: string, model: string, promptChars: number,
+		signal: AbortSignal, addUsage: (u: Usage | undefined) => void, tag?: AgentTag,
 	): Promise<StepResult> {
 		const { emit, client } = this.deps;
-		emit({ type: 'assistantStart', messageId, model });
+		emit({ type: 'assistantStart', messageId, model, agent: tag });
 		let text = '';
 		let reasoning = '';
 		const announced = new Set<string>();
@@ -244,7 +367,7 @@ export class AgentLoop {
 		} catch (err) {
 			// Keep partial text so the history stays consistent; drop calls that never ran.
 			if (text) {
-				session.messages.push({ role: 'assistant', content: text });
+				convo.messages.push({ role: 'assistant', content: text });
 			}
 			for (const id of announced) {
 				emit({ type: 'toolResult', callId: id, ok: false, summary: 'Interrupted', status: 'error' });
@@ -260,7 +383,7 @@ export class AgentLoop {
 
 		addUsage(done.usage);
 		if (done.usage?.promptTokens) {
-			session.charsPerToken = Math.min(8, Math.max(1.5, promptChars / done.usage.promptTokens));
+			convo.charsPerToken = Math.min(8, Math.max(1.5, promptChars / done.usage.promptTokens));
 		}
 		const toolCalls = done.toolCalls;
 		if (!text && !toolCalls.length) {
@@ -272,7 +395,7 @@ export class AgentLoop {
 			}
 			return { text, toolCalls, finishReason: done.finishReason };
 		}
-		session.messages.push({
+		convo.messages.push({
 			role: 'assistant',
 			content: text || null,
 			...(toolCalls.length ? { tool_calls: toolCalls } : {}),
@@ -316,7 +439,7 @@ export class AgentLoop {
 				results[k] = { role: 'tool', tool_call_id: c.id, content: 'Cancelled: the user stopped the turn before this tool ran.' };
 			}
 		});
-		scope.session.messages.push(...(results as ChatMessage[]));
+		scope.convo.messages.push(...(results as ChatMessage[]));
 	}
 
 	private async runTool(scope: StepScope, call: ToolCall, parsed: ParsedArgs): Promise<ChatMessage> {
@@ -329,6 +452,7 @@ export class AgentLoop {
 			emit({ type: 'toolResult', callId, ok: r.ok, summary: r.summary, detail, status: r.status ?? (r.ok ? 'done' : 'error') });
 			return { role: 'tool', tool_call_id: callId, content: truncateMiddle(r.content) };
 		};
+		const stopped = () => finish({ ok: false, content: 'Cancelled: the user stopped the turn.', summary: 'Stopped', status: 'error' });
 
 		if (!parsed.ok) {
 			return finish(errorResult(`Invalid arguments: ${parsed.error}. Call ${name} again with valid JSON arguments.`, 'Invalid arguments'));
@@ -338,8 +462,8 @@ export class AgentLoop {
 			return finish(errorResult(`Unknown tool "${name}". Available tools: ${[...scope.allowed].join(', ') || 'none'}.`, `Unknown tool ${name}`));
 		}
 		if (!scope.allowed.has(name)) {
-			const where = scope.trusted ? `${scope.opts.mode()} mode` : 'an untrusted workspace';
-			return finish(errorResult(`${name} is not available in ${where}.`, 'Not available'));
+			const where = scope.agent ? `to ${scope.agent.tag.kind} sub-agents` : `in ${scope.opts.mode()} mode`;
+			return finish(errorResult(`${name} is not available ${where}.`, 'Not available'));
 		}
 		const invalid = validateArgs(tool.parameters, parsed.value);
 		if (invalid) {
@@ -347,13 +471,30 @@ export class AgentLoop {
 		}
 
 		const args = parsed.value;
+		if (needsTrust(tool) && !vscode.workspace.isTrusted) {
+			// Restricted Mode: ask the user to trust the workspace instead of failing silently.
+			emit({ type: 'toolCall', messageId: scope.messageId, callId, name, args, status: 'awaitingApproval' });
+			const action = tool.permission === 'command' ? 'run commands' : 'edit files';
+			const trusted = !scope.turn.trustDeclined && await this.deps.requestTrust(action, scope.signal);
+			if (scope.signal.aborted) {
+				return stopped();
+			}
+			if (!trusted) {
+				scope.turn.trustDeclined = true;
+				return finish(errorResult(
+					`${name} needs a trusted workspace, and the user did not trust this one. Don't retry edits or commands in this turn: ` +
+					'continue read-only and describe the changes you would make.',
+					'Workspace not trusted'));
+			}
+		}
+
 		emit({ type: 'toolCall', messageId: scope.messageId, callId, name, args, status: 'running' });
 		const setStatus = (approved: boolean) =>
 			emit({ type: 'toolCall', messageId: scope.messageId, callId, name, args, status: approved ? 'running' : 'rejected' });
 
 		const ctx: ToolContext = {
 			callId,
-			session: scope.session,
+			session: scope.convo,
 			signal: scope.signal,
 			roots: scope.roots,
 			settings,
@@ -362,14 +503,69 @@ export class AgentLoop {
 				this.approveEdit(scope, callId, file, original, proposed, preview, setStatus),
 			approveCommand: (command, cwdLabel, warning) =>
 				this.approveCommand(scope, callId, command, cwdLabel, warning, setStatus),
+			runSubagent: scope.agent ? undefined : request => this.runSubagent(scope, request),
 		};
 		try {
 			return finish(await tool.execute(args, ctx));
 		} catch (err) {
 			if (scope.signal.aborted || isAbortError(err)) {
-				return finish({ ok: false, content: 'Cancelled: the user stopped the turn.', summary: 'Stopped', status: 'error' });
+				return stopped();
 			}
 			return finish(errorResult(`${name} failed: ${err instanceof Error ? err.message : String(err)}`, 'Failed'));
+		}
+	}
+
+	/** Runs a sub-agent inside the current turn (sharing its usage, approvals and Stop) and returns its report. */
+	private async runSubagent(parent: StepScope, request: SubagentRequest): Promise<ToolResult> {
+		let agents = this.subagents.get(parent.session);
+		if (!agents) {
+			agents = new Map();
+			this.subagents.set(parent.session, agents);
+		}
+		let agent: Subagent;
+		if (request.agentId) {
+			const existing = agents.get(request.agentId);
+			if (!existing) {
+				return errorResult(
+					`Unknown agent_id "${request.agentId}". Sub-agents only last for this chat while VS Code stays open; start a new one without agent_id.`,
+					'Unknown sub-agent');
+			}
+			if (existing.tag.kind !== request.kind) {
+				return errorResult(`agent_id "${request.agentId}" is a ${existing.tag.kind} sub-agent; continue it with the ${existing.tag.kind} tool.`, 'Wrong sub-agent type');
+			}
+			if (existing.busy) {
+				return errorResult(`Sub-agent "${request.agentId}" is still working on another request.`, 'Sub-agent busy');
+			}
+			agent = existing;
+		} else {
+			agent = {
+				tag: { id: newId('agent_'), kind: request.kind, label: request.description || 'Sub-agent task' },
+				messages: [],
+				readFiles: {},
+				charsPerToken: parent.session.charsPerToken,
+				busy: false,
+			};
+			agents.set(agent.tag.id, agent);
+		}
+
+		// Set before the first await so a parallel follow-up to the same agent sees it.
+		agent.busy = true;
+		agent.messages.push({ role: 'user', content: request.prompt });
+		await this.subagentSlots.acquire();
+		try {
+			const end = await this.loop({ session: parent.session, convo: agent, opts: parent.opts, turn: parent.turn, signal: parent.signal, agent });
+			if (end.reason === 'stopped') {
+				throw new OpenRouterError('aborted', 'Stopped');
+			}
+			return subagentResult(agent, end, this.deps.settings.maxIterations);
+		} catch (err) {
+			if (parent.signal.aborted || isAbortError(err)) {
+				throw err;
+			}
+			return errorResult(`The ${agent.tag.kind} sub-agent failed: ${toOpenRouterError(err).message}`, 'Sub-agent failed');
+		} finally {
+			agent.busy = false;
+			this.subagentSlots.release();
 		}
 	}
 

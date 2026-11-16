@@ -50,7 +50,10 @@ export function applyTranscriptEvent(items: TranscriptItem[], ev: TranscriptEven
 			return items.filter(i => i.id !== ev.id);
 
 		case 'assistantStart':
-			return [...items, { kind: 'assistant', id: ev.messageId, model: ev.model, text: '', reasoning: '', toolCalls: [] }];
+			return [...items, {
+				kind: 'assistant', id: ev.messageId, model: ev.model, text: '', reasoning: '', toolCalls: [],
+				...(ev.agent ? { agent: ev.agent } : {}),
+			}];
 
 		case 'textDelta':
 			return updateAssistant(items, ev.messageId, a => ({ ...a, text: a.text + ev.text }));

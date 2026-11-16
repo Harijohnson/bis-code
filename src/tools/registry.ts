@@ -6,6 +6,7 @@ import { grepTool } from './grep';
 import { listDirTool } from './listDir';
 import { readFileTool } from './readFile';
 import { runCommandTool } from './runCommand';
+import { delegateTool, exploreTool } from './subagents';
 import type { Tool } from './types';
 import { writeFileTool } from './writeFile';
 
@@ -46,5 +47,7 @@ export function createToolRegistry(): ToolRegistry {
 		editFileTool,
 		writeFileTool,
 		runCommandTool,
+		exploreTool,
+		delegateTool,
 	]);
 }

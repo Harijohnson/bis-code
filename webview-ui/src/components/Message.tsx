@@ -1,5 +1,5 @@
 import { formatCost, shortModelName } from '../../../src/shared/format';
-import type { ModelInfo, TranscriptItem, Usage } from '../../../src/shared/protocol';
+import type { AgentTag, ModelInfo, TranscriptItem, Usage } from '../../../src/shared/protocol';
 import { post } from '../vscodeApi';
 import { Codicon, ExternalLink } from './common';
 import { Markdown } from './Markdown';
@@ -23,10 +23,22 @@ function UserMessage({ item }: { item: Item<'user'> }) {
 	);
 }
 
+function SubagentLabel({ tag }: { tag: AgentTag }) {
+	const explore = tag.kind === 'explore';
+	return (
+		<div className="subagent-label" title={explore ? 'Read-only sub-agent' : 'Sub-agent that can edit files and run commands'}>
+			<Codicon name={explore ? 'telescope' : 'robot'} />
+			<span className="subagent-kind">{explore ? 'Explore' : 'Delegate'}</span>
+			<span className="subagent-task">{tag.label}</span>
+		</div>
+	);
+}
+
 function AssistantMessage({ item, streaming }: { item: Item<'assistant'>; streaming: boolean }) {
 	const empty = !item.text && !item.reasoning && item.toolCalls.length === 0;
 	return (
-		<div className="assistant-message">
+		<div className={item.agent ? 'assistant-message subagent' : 'assistant-message'}>
+			{item.agent && <SubagentLabel tag={item.agent} />}
 			{item.reasoning && (
 				<details className="reasoning" open={streaming && !item.text && item.toolCalls.length === 0}>
 					<summary><Codicon name="lightbulb" /> Thinking</summary>

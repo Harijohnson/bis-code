@@ -17,11 +17,14 @@ import { isDeniedPath } from '../util/glob';
 import { newId, truncateEnd } from '../util/text';
 import { AgentLoop } from './agentLoop';
 import type { PermissionGate } from './permissions';
+import type { ProjectMap } from './projectMap';
 import { titleFrom, toView, type Session, type SessionManager } from './session';
+import { MANAGE_TRUST_COMMAND, requestWorkspaceTrust } from './trust';
 
 const SELECTED_MODEL_KEY = 'bisCode.selectedModel';
 const RECENT_MODELS_KEY = 'bisCode.recentModels';
-const MODE_KEY = 'bisCode.mode';
+/** Every window and every new chat starts in this mode; it is not restored from earlier sessions. */
+const DEFAULT_MODE: Mode = 'agent';
 const MAX_RECENT = 5;
 const MAX_ATTACHED_SELECTION = 20_000;
 
@@ -35,6 +38,7 @@ export interface ControllerDeps {
 	gate: PermissionGate;
 	diff: DiffPreviewProvider;
 	registry: ToolRegistry;
+	projectMap: ProjectMap;
 }
 
 interface Rollback {
@@ -49,7 +53,7 @@ interface Rollback {
  */
 export class ChatController implements vscode.Disposable {
 	private post: (msg: ExtensionMessage) => void = () => undefined;
-	private mode: Mode;
+	private mode: Mode = DEFAULT_MODE;
 	private autoEdit: boolean;
 	private hasKey = false;
 	private turn: { abort: AbortController; done: Promise<void> } | undefined;
@@ -66,7 +70,6 @@ export class ChatController implements vscode.Disposable {
 	readonly onDidChangeModel = this.modelEmitter.event;
 
 	constructor(private readonly deps: ControllerDeps) {
-		this.mode = deps.context.workspaceState.get<Mode>(MODE_KEY, 'agent');
 		this.autoEdit = deps.settings.autoApproveEdits;
 		this.agent = new AgentLoop({
 			client: deps.client,
@@ -75,8 +78,10 @@ export class ChatController implements vscode.Disposable {
 			gate: deps.gate,
 			diff: deps.diff,
 			registry: deps.registry,
+			projectMap: deps.projectMap,
 			emit: ev => this.emit(ev),
 			getEditor: () => this.currentEditor(),
+			requestTrust: requestWorkspaceTrust,
 		});
 
 		const active = vscode.window.activeTextEditor;
@@ -218,7 +223,7 @@ export class ChatController implements vscode.Disposable {
 					await this.deps.catalog.refresh();
 					break;
 				case 'setMode':
-					await this.setMode(msg.mode);
+					this.setMode(msg.mode);
 					break;
 				case 'setAutoEdit':
 					this.setAutoEdit(msg.value);
@@ -249,6 +254,9 @@ export class ChatController implements vscode.Disposable {
 					break;
 				case 'openSettings':
 					await vscode.commands.executeCommand('workbench.action.openSettings', 'bisCode');
+					break;
+				case 'requestTrust':
+					await vscode.commands.executeCommand(MANAGE_TRUST_COMMAND);
 					break;
 			}
 		} catch (err) {
@@ -438,9 +446,8 @@ export class ChatController implements vscode.Disposable {
 		this.modelEmitter.fire();
 	}
 
-	private async setMode(mode: Mode): Promise<void> {
+	private setMode(mode: Mode): void {
 		this.mode = mode;
-		await this.deps.context.workspaceState.update(MODE_KEY, mode);
 		this.post({ type: 'mode', mode });
 	}
 
@@ -453,6 +460,7 @@ export class ChatController implements vscode.Disposable {
 		await this.stopAndWait();
 		await this.deps.sessions.save(this.deps.sessions.current);
 		this.deps.sessions.newSession();
+		this.mode = DEFAULT_MODE;
 		this.autoEdit = this.deps.settings.autoApproveEdits;
 		this.postState();
 	}

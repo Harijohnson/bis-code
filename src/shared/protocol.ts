@@ -3,6 +3,17 @@
 
 export type Mode = 'agent' | 'plan' | 'chat';
 
+/** explore: read-only research. delegate: may edit files and run commands (with approvals). */
+export type SubagentKind = 'explore' | 'delegate';
+
+/** Marks a transcript message written by a sub-agent. */
+export interface AgentTag {
+	id: string;
+	kind: SubagentKind;
+	/** Short task label given by the main agent. */
+	label: string;
+}
+
 export interface ModelInfo {
 	id: string;
 	name: string;
@@ -57,7 +68,7 @@ export type ErrorCode = 'auth' | 'credits' | 'rateLimit' | 'network' | 'model' |
 
 export type TranscriptItem =
 	| { kind: 'user'; id: string; text: string; contextLabel?: string }
-	| { kind: 'assistant'; id: string; model: string; text: string; reasoning: string; toolCalls: ToolCallView[] }
+	| { kind: 'assistant'; id: string; model: string; text: string; reasoning: string; toolCalls: ToolCallView[]; agent?: AgentTag }
 	| { kind: 'footer'; id: string; model: string; usage?: Usage; cost?: number; stopped?: boolean }
 	| { kind: 'divider'; id: string; text: string }
 	| { kind: 'notice'; id: string; text: string; action?: 'continue' }
@@ -132,13 +143,14 @@ export type WebviewMessage =
 	| { type: 'openFile'; path: string; line?: number }
 	| { type: 'insertCode'; code: string }
 	| { type: 'openExternal'; url: string }
-	| { type: 'openSettings' };
+	| { type: 'openSettings' }
+	| { type: 'requestTrust' };
 
 /** Events that change the transcript. Applied by `applyTranscriptEvent` on both sides. */
 export type TranscriptEvent =
 	| { type: 'transcriptAppend'; item: TranscriptItem }
 	| { type: 'transcriptRemove'; id: string }
-	| { type: 'assistantStart'; messageId: string; model: string }
+	| { type: 'assistantStart'; messageId: string; model: string; agent?: AgentTag }
 	| { type: 'textDelta'; messageId: string; text: string }
 	| { type: 'reasoningDelta'; messageId: string; text: string }
 	| { type: 'toolCall'; messageId: string; callId: string; name: string; args: unknown; status: ToolStatus }

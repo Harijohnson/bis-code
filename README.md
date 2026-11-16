@@ -6,7 +6,9 @@ An AI coding agent for VS Code that works like Claude Code: it chats with you, r
 
 - **Chat panel** in the activity bar with streaming Markdown, syntax-highlighted code blocks (Copy / Insert at cursor) and a collapsible "Thinking" block for reasoning models.
 - **Any OpenRouter model.** A searchable picker shows context size, price and `tools` / `vision` / `reasoning` / `free` badges, with filters and a Recent section. You can switch model mid-conversation.
-- **Agent tools:** `read_file`, `list_dir`, `glob`, `grep` (VS Code's bundled ripgrep), `get_diagnostics`, `edit_file`, `write_file` and `run_command`.
+- **Agent tools:** `read_file`, `list_dir`, `glob`, `grep` (VS Code's bundled ripgrep, with context lines and a files-only mode), `get_diagnostics`, `edit_file`, `write_file` and `run_command`.
+- **Sub-agents.** The agent can split larger work: `explore` starts read-only sub-agents that research separate questions in parallel, and `delegate` hands one well-scoped part of a feature to a sub-agent that can edit and run commands (you still approve each edit and command). Sub-agent messages appear in the chat under an accent rule, and the main agent can send a sub-agent follow-ups.
+- **Project map.** When a project is opened, bis-code maps its files (respecting `.gitignore`) and keeps the map current, so the agent can go straight to the right files instead of listing directories. Run **bis-code: Show Project Map** to see it.
 - **You stay in control.** Edits open a diff and wait for **Accept / Reject**, and can be undone with Ctrl+Z. Commands show the exact command line and wait for **Run / Reject / Always allow**.
 - **Three modes:** **Agent** (all tools), **Plan** (read-only) and **Chat** (no tools; works with any model).
 - **Sessions:** start a new chat, browse history and resume. Each turn shows tokens and cost, and long chats are compacted automatically.
@@ -26,7 +28,7 @@ Agent and Plan modes need a model that supports tool calling. That is why the pi
 | Mode | Tools sent to the model | Use it for |
 |---|---|---|
 | Agent | All, with approvals | Making changes, running tests, fixing failures |
-| Plan | Read-only (`read_file`, `list_dir`, `glob`, `grep`, `get_diagnostics`) | Understanding code and planning changes safely |
+| Plan | Read-only (`read_file`, `list_dir`, `glob`, `grep`, `get_diagnostics`, `explore`) | Understanding code and planning changes safely |
 | Chat | None | Plain conversation; works with every model |
 
 **Auto-edit** (the composer checkbox, or `bisCode.autoApproveEdits`) applies edits without asking. Commands still ask unless they match `bisCode.allowedCommands`.
@@ -39,7 +41,7 @@ Agent and Plan modes need a model that supports tool calling. That is why the pi
 - **Read before write.** The agent must read a file before changing it, and the change is refused if the file changed on disk in the meantime.
 - **Command denylist.** Commands such as `rm -rf /`, `format C:`, force-pushing to `main` or piping `curl` into a shell are blocked even if you allow everything.
 - **Allow-listed prefixes only match simple commands.** Commands containing `&&`, `|`, `;`, redirection or `$(…)` always ask.
-- **Untrusted workspaces:** editing and running commands are turned off.
+- **Untrusted workspaces:** the agent can read and search. The first time it tries to edit a file or run a command, bis-code asks you to trust the workspace and opens VS Code's Workspace Trust editor. If you decline, it continues read-only for that turn. You can also click **Restricted** in the composer to manage trust.
 
 ## Project instructions
 
@@ -62,7 +64,7 @@ If an `AGENTS.md` or `BIS.md` file exists at the workspace root, its contents ar
 
 ## Commands
 
-`bis-code: Open Chat`, `New Chat`, `Select Model` (also available from the status bar), `Set OpenRouter API Key`, `Clear OpenRouter API Key`, `Refresh Model List`, `Add Selection to Chat` (editor context menu) and `Stop Current Turn`.
+`bis-code: Open Chat`, `New Chat`, `Select Model` (also available from the status bar), `Set OpenRouter API Key`, `Clear OpenRouter API Key`, `Refresh Model List`, `Add Selection to Chat` (editor context menu), `Stop Current Turn` and `Show Project Map`.
 
 ## Costs
 
@@ -83,7 +85,7 @@ Press **F5** to launch an Extension Development Host. When the extension runs in
 |---|---|
 | `pnpm run watch` | esbuild (extension + webview) and both type-checkers in watch mode |
 | `pnpm run compile` | Type-check, lint and build once |
-| `pnpm run test:unit` | Fast unit tests in plain Node (SSE parser, tool-call accumulator, edit matching, path guard, secret globs, command policy, model search, compaction, client retries) |
+| `pnpm run test:unit` | Fast unit tests in plain Node (SSE parser, tool-call accumulator, edit matching, path guard, secret globs, command policy, tool permissions, project map, model search, compaction, client retries) |
 | `pnpm test` | Unit and integration tests inside VS Code, against a local mock OpenRouter server |
 | `pnpm run package` | Production build |
 | `pnpm run vsix` | Build a `.vsix` (`vsce package --no-dependencies`; the bundle is self-contained) |

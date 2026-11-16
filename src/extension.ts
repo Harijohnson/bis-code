@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ChatController } from './agent/controller';
 import { PermissionGate } from './agent/permissions';
+import { ProjectMap } from './agent/projectMap';
 import { SessionManager } from './agent/session';
 import { ApiKeyManager } from './config/apiKeyManager';
 import { loadDevEnv } from './config/devEnv';
@@ -40,9 +41,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<BisCod
 	const sessions = new SessionManager(vscode.Uri.joinPath(context.storageUri ?? context.globalStorageUri, 'sessions'));
 	await sessions.init();
 
+	// Built in the background for every newly opened project, then kept current.
+	const projectMap = new ProjectMap(context.storageUri, settings);
+	void projectMap.init();
+
 	const diff = new DiffPreviewProvider();
 	controller = new ChatController({
-		context, settings, apiKeys, client, catalog, sessions, diff,
+		context, settings, apiKeys, client, catalog, sessions, diff, projectMap,
 		gate: new PermissionGate(),
 		registry: createToolRegistry(),
 	});
@@ -64,6 +69,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<BisCod
 		apiKeys,
 		diff,
 		statusBar,
+		projectMap,
 		{ dispose: () => void chat.dispose() },
 		vscode.workspace.registerTextDocumentContentProvider(DiffPreviewProvider.scheme, diff),
 		vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, provider),
@@ -93,6 +99,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<BisCod
 			await provider.reveal();
 		}),
 		vscode.commands.registerCommand('bisCode.stop', () => chat.stop()),
+		vscode.commands.registerCommand('bisCode.showProjectMap', () => projectMap.show()),
 	);
 
 	return { controller: chat, apiKeys, catalog };

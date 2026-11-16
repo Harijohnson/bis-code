@@ -30,7 +30,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "In untrusted workspaces bis-code can chat and read files, but cannot edit files or run commands."
+      "description": "In untrusted workspaces bis-code can chat and read files. Before it edits a file or runs a command, it asks you to trust the workspace."
     }
   },
   "contributes": {
@@ -92,6 +92,11 @@
       {
         "command": "bisCode.stop",
         "title": "Stop Current Turn",
+        "category": "bis-code"
+      },
+      {
+        "command": "bisCode.showProjectMap",
+        "title": "Show Project Map",
         "category": "bis-code"
       }
     ],
